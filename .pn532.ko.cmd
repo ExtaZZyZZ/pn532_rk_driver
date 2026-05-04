@@ -1,1 +1,0 @@
-savedcmd_pn532.ko := aarch64-linux-gnu-ld -r -EL  -maarch64elf -z noexecstack --no-warn-rwx-segments --build-id=sha1  -T /home/rguser/linux-6.18/scripts/module.lds -o pn532.ko pn532.o pn532.mod.o .module-common.o
