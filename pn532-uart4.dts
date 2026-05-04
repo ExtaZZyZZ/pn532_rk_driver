@@ -1,0 +1,36 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * Overlay: включаем UART4 на пинах gpio1-7 (TX, pin39) и gpio1-8 (RX, pin40)
+ * разъём DD1Q Diasom SOM для PN532 NFC.
+ *
+ * RK3568 iomux функция 2 на GPIO1_A7/A8 = UART4 TX/RX
+ */
+
+/ {
+	compatible = "rockchip,rk3568";
+
+	fragment@0 {
+		target = <&pinctrl>;
+		__overlay__ {
+			uart4-pn532 {
+				uart4_pn532_pins: uart4-pn532-pins {
+					/* gpio1 pin7=PA7, pin8=PA8 (=PB0), mux func 2 = UART4 */
+					rockchip,pins =
+						<1 7 2 &pcfg_pull_up>,
+						<1 8 2 &pcfg_pull_up>;
+				};
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&uart4>;
+		__overlay__ {
+			pinctrl-0 = <&uart4_pn532_pins>;
+			pinctrl-names = "default";
+			status = "okay";
+		};
+	};
+};
