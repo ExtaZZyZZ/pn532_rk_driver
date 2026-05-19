@@ -54,5 +54,9 @@ int pn532_enroll(pn532_t *dev,
 int pn532_verify(pn532_t *dev,
                  const uint8_t secret_key[16],
                  const uint8_t sector_key[6]);
+int pn532_verify_timeout(pn532_t *dev,
+                 const uint8_t secret_key[16],
+                 const uint8_t sector_key[6],
+                 int timeout_ms);
 
 #endif /* PN532_SPI_H */

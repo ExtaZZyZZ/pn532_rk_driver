@@ -211,6 +211,7 @@ int main(int argc, char *argv[])
             return 1;
         }
         print_uid(uid, uid_len);
+        
 
         uint8_t sector_block = (uint8_t)(block & ~0x03);
         printf("Authenticating sector %d (block %d) with Key %s...\n",
@@ -345,7 +346,7 @@ int main(int argc, char *argv[])
         }
         user_t u;
         if (users_find((uint32_t)ret, &u) == 0)
-            printf("Access Okey: user_id=%d name=%s role=%s\n",
+            printf("Access Ok: user_id=%d name=%s role=%s\n",
                    ret, u.name, u.role);
         else
             printf("Access Okey: user_id=%d (not in database)\n", ret);

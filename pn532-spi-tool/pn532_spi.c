@@ -462,3 +462,95 @@ int pn532_verify(pn532_t *dev,
 
     return (int)user_id;
 }
+static int spi_send_recv_timeout(pn532_t *dev,
+                         uint8_t cmd,
+                         const uint8_t *params, size_t plen,
+                         uint8_t *resp, size_t *rlen,
+                         int timeout_ms)
+{
+uint8_t txframe[PN532_MAX_FRAME_LEN];
+    uint8_t rxbuf[PN532_MAX_FRAME_LEN + 2];
+
+    int flen = pn532_build_frame(txframe, sizeof(txframe), cmd, params, plen);
+    if (flen < 0)
+        return -EINVAL;
+
+    int ret = spi_write_frame(dev, txframe, (size_t)flen);
+    if (ret < 0)
+        return ret;
+
+    ret = spi_wait_ready(dev, 1000);
+    if (ret < 0)
+        return ret;
+
+    spi_read_frame(dev, rxbuf, 16);  /* ACK frame: 6 bytes */
+
+    ret = spi_wait_ready(dev, timeout_ms);
+    if (ret < 0)
+        return ret;
+
+    ssize_t nread = spi_read_frame(dev, rxbuf, sizeof(rxbuf));
+    if (nread < 0)
+        return (int)nread;
+
+    int r = pn532_parse_frame(rxbuf, (size_t)nread, cmd, resp, rlen);
+    if (r == 1)
+        return -EIO;  /* got ACK instead of data frame */
+    return r;    
+}
+int pn532_verify_timeout(pn532_t *dev,
+                         const uint8_t secret_key[16],
+                         const uint8_t sector_key[6],
+                         int timeout_ms)
+{
+    static const uint8_t params[] = { 0x01, 0x00 };
+    uint8_t resp[32];
+    size_t rlen = sizeof(resp);
+
+    int ret = spi_send_recv_timeout(dev, PN532_CMD_IN_LIST_PASSIVE_TARGET,
+                                    params, sizeof(params),
+                                    resp, &rlen, timeout_ms);
+    if (ret < 0) return ret;
+    if (rlen < 6) return -EIO;
+    if (resp[0] == 0) return -ENODEV;
+
+    uint8_t tg        = resp[1];
+    uint8_t nfcid_len = resp[5];
+    if (rlen < (size_t)(6 + nfcid_len)) return -EIO;
+
+    uint8_t uid[PN532_UID_MAX_LEN];
+    uint8_t uid_len = nfcid_len < PN532_UID_MAX_LEN ? nfcid_len : PN532_UID_MAX_LEN;
+    memcpy(uid, &resp[6], uid_len);
+
+    ret = pn532_mifare_auth(dev, tg, ENROLL_SECTOR_BLOCK,
+                            MIFARE_CMD_AUTH_KEY_A, sector_key,
+                            uid, uid_len);
+    if (ret < 0) {
+        pn532_release(dev, tg);
+        return -EACCES;
+    }
+
+    uint8_t token[MIFARE_BLOCK_SIZE];
+    ret = pn532_mifare_read(dev, tg, ENROLL_DATA_BLOCK, token);
+    if (ret < 0) {
+        pn532_release(dev, tg);
+        return ret;
+    }
+    pn532_release(dev, tg);
+
+    aes128_decrypt(secret_key, token);
+
+    uint8_t uid4 = uid_len < 4 ? uid_len : 4;
+    if (memcmp(token, uid, uid4) != 0)
+        return -EACCES;
+
+    uint32_t user_id = ((uint32_t)token[4] << 24) |
+                       ((uint32_t)token[5] << 16) |
+                       ((uint32_t)token[6] <<  8) |
+                       ((uint32_t)token[7]);
+
+    if (users_is_blacklisted(user_id))
+        return -EACCES;
+
+    return (int)user_id;
+}
